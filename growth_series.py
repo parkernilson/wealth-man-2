@@ -37,6 +37,25 @@ class Contribution:
             raise ValueError(f"Unknown interval: {self.interval}")
 
 
+class Rate:
+    """Represents an interest rate with its type (APR or APY)."""
+
+    def __init__(self, value, rate_type):
+        self.value = value
+        self.rate_type = rate_type
+
+
+# Helper functions for creating Rate objects
+def apr(value):
+    """Create a Rate object for APR (Annual Percentage Rate)."""
+    return Rate(value, 'APR')
+
+
+def apy(value):
+    """Create a Rate object for APY (Annual Percentage Yield)."""
+    return Rate(value, 'APY')
+
+
 # Helper functions for creating Duration objects
 def months(value):
     """Create a Duration object representing months."""
@@ -65,8 +84,11 @@ class growth_series:
 
     Parameters:
     -----------
-    rate : float
-        Annual interest rate (e.g., 0.05 for 5%)
+    rate : float or Rate
+        Annual interest rate. Can be:
+        - A float (defaults to APR), e.g., 0.05 for 5% APR
+        - apr(0.05) for explicit APR
+        - apy(0.0459) for APY (Annual Percentage Yield)
     compounds : str
         Either 'monthly' or 'annually'
     contribution : Contribution, optional
@@ -75,26 +97,29 @@ class growth_series:
         A Duration object created with months() or years() (default: None)
     initial_principal : float, optional
         Starting principal amount (default: 0)
-    rate_type : str, optional
-        Either 'APR' (Annual Percentage Rate) or 'APY' (Annual Percentage Yield) (default: 'APR')
-        - APR: Nominal rate, divided by compounding periods
-        - APY: Effective rate, already accounts for compounding
     """
 
-    def __init__(self, rate, compounds, contribution=None, duration=None, initial_principal=0, rate_type='APR'):
+    def __init__(self, rate, compounds, contribution=None, duration=None, initial_principal=0):
         self.compounds = compounds
         self.contribution = contribution
         self.duration = duration
         self.initial_principal = initial_principal
-        self.rate_type = rate_type
 
         # Validate compounds parameter
         if compounds not in ['monthly', 'annually']:
             raise ValueError("compounds must be 'monthly' or 'annually'")
 
-        # Validate rate_type parameter
-        if rate_type not in ['APR', 'APY']:
-            raise ValueError("rate_type must be 'APR' or 'APY'")
+        # Handle rate parameter - accept either float (default APR) or Rate object
+        if isinstance(rate, Rate):
+            rate_value = rate.value
+            rate_type = rate.rate_type
+        elif isinstance(rate, (int, float)):
+            rate_value = rate
+            rate_type = 'APR'
+        else:
+            raise TypeError("rate must be a number or Rate object (use apr() or apy())")
+
+        self.rate_type = rate_type
 
         # Convert APY to APR if needed
         if rate_type == 'APY':
@@ -102,12 +127,12 @@ class growth_series:
             # For monthly: APR = 12 * ((1 + APY)^(1/12) - 1)
             # For annual: APY = APR (no difference)
             if compounds == 'monthly':
-                monthly_rate = (1 + rate) ** (1/12) - 1
+                monthly_rate = (1 + rate_value) ** (1/12) - 1
                 self.rate = monthly_rate * 12
             else:
-                self.rate = rate
+                self.rate = rate_value
         else:
-            self.rate = rate
+            self.rate = rate_value
 
     def _get_compounding_periods_per_year(self):
         """Get the number of compounding periods per year."""
@@ -188,69 +213,78 @@ class growth_series:
 
 # Example usage
 if __name__ == "__main__":
-    # Example 1: Using APR (most common for calculations)
+    # Example 1: Simple float (defaults to APR)
     gs1 = growth_series(
-        rate=0.05,
+        rate=0.05,  # Defaults to APR
         compounds='monthly',
         contribution=monthly(100),
         duration=years(5),
-        initial_principal=1000,
-        rate_type='APR'
+        initial_principal=1000
     )
 
-    print(f"Example 1: 5% APR, monthly compounding, $100/month, 5 years")
+    print(f"Example 1: 5% (default APR), monthly compounding, $100/month, 5 years")
     print(f"Final value: ${gs1.get_final_value():.2f}")
     print(f"Value at 1 year: ${gs1.value_at(1):.2f}")
     print()
 
-    # Example 2: Using APY (what banks advertise for HYSA)
+    # Example 2: Explicit APR using apr() helper
     gs2 = growth_series(
-        rate=0.0459,  # 4.59% APY
+        rate=apr(0.05),
         compounds='monthly',
         contribution=monthly(100),
         duration=years(5),
-        initial_principal=1000,
-        rate_type='APY'
+        initial_principal=1000
     )
 
-    print(f"Example 2: 4.59% APY, monthly compounding, $100/month, 5 years")
+    print(f"Example 2: apr(0.05), monthly compounding, $100/month, 5 years")
     print(f"Final value: ${gs2.get_final_value():.2f}")
     print(f"Value at 1 year: ${gs2.value_at(1):.2f}")
     print()
 
-    # Example 3: Brokerage account with annual compounding
+    # Example 3: HYSA using APY (what banks advertise)
     gs3 = growth_series(
-        rate=0.08,
+        rate=apy(0.0459),  # Bank's advertised APY
+        compounds='monthly',
+        contribution=monthly(100),
+        duration=years(5),
+        initial_principal=1000
+    )
+
+    print(f"Example 3: apy(0.0459) HYSA, monthly compounding, $100/month, 5 years")
+    print(f"Final value: ${gs3.get_final_value():.2f}")
+    print(f"Value at 1 year: ${gs3.value_at(1):.2f}")
+    print()
+
+    # Example 4: Brokerage account (simple annual)
+    gs4 = growth_series(
+        rate=0.08,  # 8% expected return
         compounds='annually',
         contribution=annual(6000),
         duration=years(30),
-        initial_principal=10000,
-        rate_type='APR'
+        initial_principal=10000
     )
 
-    print(f"Example 3: 8% return, annual compounding, $6000/year, 30 years")
-    print(f"Final value: ${gs3.get_final_value():.2f}")
-    print(f"Value at 10 years: ${gs3.value_at(10):.2f}")
+    print(f"Example 4: 8% return, annual compounding, $6000/year, 30 years")
+    print(f"Final value: ${gs4.get_final_value():.2f}")
+    print(f"Value at 10 years: ${gs4.value_at(10):.2f}")
     print()
 
-    # Example 4: Compare APR vs APY
-    print("Comparison: APR vs APY for principal only (no contributions)")
+    # Example 5: Compare APR vs APY
+    print("Comparison: apr(0.045) vs apy(0.0459)")
 
     gs_apr = growth_series(
-        rate=0.045,
+        rate=apr(0.045),
         compounds='monthly',
         duration=years(1),
-        initial_principal=10000,
-        rate_type='APR'
+        initial_principal=10000
     )
 
     gs_apy = growth_series(
-        rate=0.0459,  # 4.59% APY ≈ 4.5% APR with monthly compounding
+        rate=apy(0.0459),
         compounds='monthly',
         duration=years(1),
-        initial_principal=10000,
-        rate_type='APY'
+        initial_principal=10000
     )
 
-    print(f"$10,000 at 4.5% APR after 1 year: ${gs_apr.get_final_value():.2f}")
-    print(f"$10,000 at 4.59% APY after 1 year: ${gs_apy.get_final_value():.2f}")
+    print(f"$10,000 at apr(0.045) after 1 year: ${gs_apr.get_final_value():.2f}")
+    print(f"$10,000 at apy(0.0459) after 1 year: ${gs_apy.get_final_value():.2f}")
