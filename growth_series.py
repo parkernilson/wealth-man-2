@@ -94,15 +94,17 @@ class growth_series:
         A Contribution object created with monthly() or annual() (default: None)
     duration : Duration, optional
         A Duration object created with months() or years() (default: None)
-    initial_principal : float, optional
-        Starting principal amount (default: 0)
+
+    Note:
+    -----
+    Principal is not set in the constructor. Instead, it is provided when calling
+    value_at() or get_final_value() methods.
     """
 
-    def __init__(self, rate, compounds, contribution=None, duration=None, initial_principal=0):
+    def __init__(self, rate, compounds, contribution=None, duration=None):
         self.compounds = compounds
         self.contribution = contribution
         self.duration = duration
-        self.initial_principal = initial_principal
 
         # Validate compounds parameter
         if compounds not in ['monthly', 'annually']:
@@ -148,7 +150,7 @@ class growth_series:
         annual_contribution = self.contribution.to_annual()
         return annual_contribution / n
 
-    def value_at(self, t_years):
+    def value_at(self, t_years, principal):
         """
         Calculate the account value at time t (in years) from the start.
 
@@ -156,6 +158,8 @@ class growth_series:
         -----------
         t_years : float
             Number of years from the start
+        principal : float
+            Starting principal amount
 
         Returns:
         --------
@@ -175,13 +179,13 @@ class growth_series:
 
         # If rate is 0, use simple calculation
         if rate_per_period == 0:
-            return self.initial_principal + (pmt * num_periods)
+            return principal + (pmt * num_periods)
 
         # Compound interest with regular contributions formula:
         # FV = P(1 + r)^n + PMT × [((1 + r)^n - 1) / r]
 
         # Future value of principal
-        fv_principal = self.initial_principal * ((1 + rate_per_period) ** num_periods)
+        fv_principal = principal * ((1 + rate_per_period) ** num_periods)
 
         # Future value of contributions (annuity)
         if pmt > 0:
@@ -191,9 +195,14 @@ class growth_series:
 
         return fv_principal + fv_contributions
 
-    def get_final_value(self):
+    def get_final_value(self, principal):
         """
         Calculate the final account value at the end of the duration.
+
+        Parameters:
+        -----------
+        principal : float
+            Starting principal amount
 
         Returns:
         --------
@@ -204,7 +213,100 @@ class growth_series:
             raise ValueError("Duration not set.")
 
         total_years = self.duration.to_years()
-        return self.value_at(total_years)
+        return self.value_at(total_years, principal)
+
+
+class growth_scenario:
+    """
+    A class to model multiple sequential growth periods (series).
+
+    This class chains together multiple growth_series objects, where the final value
+    from one series becomes the principal for the next series.
+
+    Parameters:
+    -----------
+    initial_principal : float
+        Starting principal amount for the first series
+    series_list : list of growth_series
+        List of growth_series objects to apply sequentially
+
+    Example:
+    --------
+    # Scenario: Start with $10k, grow at 5% for 5 years, then 7% for 10 years
+    scenario = growth_scenario(
+        initial_principal=10000,
+        series_list=[
+            growth_series(rate=apr(0.05), compounds='monthly', duration=years(5)),
+            growth_series(rate=apr(0.07), compounds='monthly', duration=years(10))
+        ]
+    )
+    final_value = scenario.get_final_value()
+    """
+
+    def __init__(self, initial_principal, series_list):
+        self.initial_principal = initial_principal
+        self.series_list = series_list
+
+    def get_final_value(self):
+        """
+        Calculate the final value after all growth series are applied.
+
+        Returns:
+        --------
+        float
+            Final value after all series
+        """
+        principal = self.initial_principal
+
+        for series in self.series_list:
+            principal = series.get_final_value(principal)
+
+        return principal
+
+    def get_series_values(self):
+        """
+        Calculate the final value for each series in the scenario.
+
+        Returns:
+        --------
+        list of float
+            Final values after each series in order
+        """
+        principal = self.initial_principal
+        values = []
+
+        for series in self.series_list:
+            principal = series.get_final_value(principal)
+            values.append(principal)
+
+        return values
+
+    def value_at_series(self, series_index, t_years):
+        """
+        Calculate the value at a specific time within a specific series.
+
+        Parameters:
+        -----------
+        series_index : int
+            Index of the series (0-based)
+        t_years : float
+            Number of years from the start of that series
+
+        Returns:
+        --------
+        float
+            Account value at that point
+        """
+        if series_index < 0 or series_index >= len(self.series_list):
+            raise ValueError(f"series_index must be between 0 and {len(self.series_list) - 1}")
+
+        # Calculate principal at the start of the target series
+        principal = self.initial_principal
+        for i in range(series_index):
+            principal = self.series_list[i].get_final_value(principal)
+
+        # Calculate value at time t within the target series
+        return self.series_list[series_index].value_at(t_years, principal)
 
 
 # Example usage
@@ -214,13 +316,13 @@ if __name__ == "__main__":
         rate=apr(0.05),
         compounds='monthly',
         contribution=monthly(100),
-        duration=years(5),
-        initial_principal=1000
+        duration=years(5)
     )
 
-    print(f"Example 1: apr(0.05), monthly compounding, $100/month, 5 years")
-    print(f"Final value: ${gs1.get_final_value():.2f}")
-    print(f"Value at 1 year: ${gs1.value_at(1):.2f}")
+    principal1 = 1000
+    print(f"Example 1: apr(0.05), monthly compounding, $100/month, 5 years, $1000 principal")
+    print(f"Final value: ${gs1.get_final_value(principal1):.2f}")
+    print(f"Value at 1 year: ${gs1.value_at(1, principal1):.2f}")
     print()
 
     # Example 2: HYSA using APY (what banks advertise)
@@ -228,13 +330,13 @@ if __name__ == "__main__":
         rate=apy(0.0459),  # Bank's advertised APY
         compounds='monthly',
         contribution=monthly(100),
-        duration=years(5),
-        initial_principal=1000
+        duration=years(5)
     )
 
-    print(f"Example 2: apy(0.0459) HYSA, monthly compounding, $100/month, 5 years")
-    print(f"Final value: ${gs2.get_final_value():.2f}")
-    print(f"Value at 1 year: ${gs2.value_at(1):.2f}")
+    principal2 = 1000
+    print(f"Example 2: apy(0.0459) HYSA, monthly compounding, $100/month, 5 years, $1000 principal")
+    print(f"Final value: ${gs2.get_final_value(principal2):.2f}")
+    print(f"Value at 1 year: ${gs2.value_at(1, principal2):.2f}")
     print()
 
     # Example 3: Brokerage account with annual compounding
@@ -242,13 +344,13 @@ if __name__ == "__main__":
         rate=apr(0.08),
         compounds='annually',
         contribution=annual(6000),
-        duration=years(30),
-        initial_principal=10000
+        duration=years(30)
     )
 
-    print(f"Example 3: apr(0.08), annual compounding, $6000/year, 30 years")
-    print(f"Final value: ${gs3.get_final_value():.2f}")
-    print(f"Value at 10 years: ${gs3.value_at(10):.2f}")
+    principal3 = 10000
+    print(f"Example 3: apr(0.08), annual compounding, $6000/year, 30 years, $10000 principal")
+    print(f"Final value: ${gs3.get_final_value(principal3):.2f}")
+    print(f"Value at 10 years: ${gs3.value_at(10, principal3):.2f}")
     print()
 
     # Example 4: Compare APR vs APY
@@ -257,16 +359,38 @@ if __name__ == "__main__":
     gs_apr = growth_series(
         rate=apr(0.045),
         compounds='monthly',
-        duration=years(1),
-        initial_principal=10000
+        duration=years(1)
     )
 
     gs_apy = growth_series(
         rate=apy(0.0459),
         compounds='monthly',
-        duration=years(1),
-        initial_principal=10000
+        duration=years(1)
     )
 
-    print(f"$10,000 at apr(0.045) after 1 year: ${gs_apr.get_final_value():.2f}")
-    print(f"$10,000 at apy(0.0459) after 1 year: ${gs_apy.get_final_value():.2f}")
+    principal4 = 10000
+    print(f"$10,000 at apr(0.045) after 1 year: ${gs_apr.get_final_value(principal4):.2f}")
+    print(f"$10,000 at apy(0.0459) after 1 year: ${gs_apy.get_final_value(principal4):.2f}")
+    print()
+
+    # Example 5: growth_scenario - Chaining multiple growth periods
+    print("Example 5: growth_scenario - Multiple growth periods")
+    print("Scenario: Start with $10,000")
+    print("  - 5 years in HYSA at 4% APR")
+    print("  - Then 10 years in brokerage at 8% APR")
+    print("  - Then 15 years in brokerage at 10% APR with $500/month contributions")
+
+    scenario = growth_scenario(
+        initial_principal=10000,
+        series_list=[
+            growth_series(rate=apr(0.04), compounds='monthly', duration=years(5)),
+            growth_series(rate=apr(0.08), compounds='monthly', duration=years(10)),
+            growth_series(rate=apr(0.10), compounds='monthly', contribution=monthly(500), duration=years(15))
+        ]
+    )
+
+    series_values = scenario.get_series_values()
+    print(f"After series 1 (5 years): ${series_values[0]:.2f}")
+    print(f"After series 2 (10 years): ${series_values[1]:.2f}")
+    print(f"After series 3 (15 years): ${series_values[2]:.2f}")
+    print(f"Final value: ${scenario.get_final_value():.2f}")
