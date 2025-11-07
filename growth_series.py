@@ -84,10 +84,9 @@ class growth_series:
 
     Parameters:
     -----------
-    rate : float or Rate
-        Annual interest rate. Can be:
-        - A float (defaults to APR), e.g., 0.05 for 5% APR
-        - apr(0.05) for explicit APR
+    rate : Rate
+        Annual interest rate. Must use either:
+        - apr(0.05) for APR (Annual Percentage Rate)
         - apy(0.0459) for APY (Annual Percentage Yield)
     compounds : str
         Either 'monthly' or 'annually'
@@ -109,15 +108,12 @@ class growth_series:
         if compounds not in ['monthly', 'annually']:
             raise ValueError("compounds must be 'monthly' or 'annually'")
 
-        # Handle rate parameter - accept either float (default APR) or Rate object
+        # Handle rate parameter - require Rate object
         if isinstance(rate, Rate):
             rate_value = rate.value
             rate_type = rate.rate_type
-        elif isinstance(rate, (int, float)):
-            rate_value = rate
-            rate_type = 'APR'
         else:
-            raise TypeError("rate must be a number or Rate object (use apr() or apy())")
+            raise TypeError("rate must be created with apr() or apy() helper functions")
 
         self.rate_type = rate_type
 
@@ -213,22 +209,8 @@ class growth_series:
 
 # Example usage
 if __name__ == "__main__":
-    # Example 1: Simple float (defaults to APR)
+    # Example 1: Using APR
     gs1 = growth_series(
-        rate=0.05,  # Defaults to APR
-        compounds='monthly',
-        contribution=monthly(100),
-        duration=years(5),
-        initial_principal=1000
-    )
-
-    print(f"Example 1: 5% (default APR), monthly compounding, $100/month, 5 years")
-    print(f"Final value: ${gs1.get_final_value():.2f}")
-    print(f"Value at 1 year: ${gs1.value_at(1):.2f}")
-    print()
-
-    # Example 2: Explicit APR using apr() helper
-    gs2 = growth_series(
         rate=apr(0.05),
         compounds='monthly',
         contribution=monthly(100),
@@ -236,13 +218,13 @@ if __name__ == "__main__":
         initial_principal=1000
     )
 
-    print(f"Example 2: apr(0.05), monthly compounding, $100/month, 5 years")
-    print(f"Final value: ${gs2.get_final_value():.2f}")
-    print(f"Value at 1 year: ${gs2.value_at(1):.2f}")
+    print(f"Example 1: apr(0.05), monthly compounding, $100/month, 5 years")
+    print(f"Final value: ${gs1.get_final_value():.2f}")
+    print(f"Value at 1 year: ${gs1.value_at(1):.2f}")
     print()
 
-    # Example 3: HYSA using APY (what banks advertise)
-    gs3 = growth_series(
+    # Example 2: HYSA using APY (what banks advertise)
+    gs2 = growth_series(
         rate=apy(0.0459),  # Bank's advertised APY
         compounds='monthly',
         contribution=monthly(100),
@@ -250,26 +232,26 @@ if __name__ == "__main__":
         initial_principal=1000
     )
 
-    print(f"Example 3: apy(0.0459) HYSA, monthly compounding, $100/month, 5 years")
-    print(f"Final value: ${gs3.get_final_value():.2f}")
-    print(f"Value at 1 year: ${gs3.value_at(1):.2f}")
+    print(f"Example 2: apy(0.0459) HYSA, monthly compounding, $100/month, 5 years")
+    print(f"Final value: ${gs2.get_final_value():.2f}")
+    print(f"Value at 1 year: ${gs2.value_at(1):.2f}")
     print()
 
-    # Example 4: Brokerage account (simple annual)
-    gs4 = growth_series(
-        rate=0.08,  # 8% expected return
+    # Example 3: Brokerage account with annual compounding
+    gs3 = growth_series(
+        rate=apr(0.08),
         compounds='annually',
         contribution=annual(6000),
         duration=years(30),
         initial_principal=10000
     )
 
-    print(f"Example 4: 8% return, annual compounding, $6000/year, 30 years")
-    print(f"Final value: ${gs4.get_final_value():.2f}")
-    print(f"Value at 10 years: ${gs4.value_at(10):.2f}")
+    print(f"Example 3: apr(0.08), annual compounding, $6000/year, 30 years")
+    print(f"Final value: ${gs3.get_final_value():.2f}")
+    print(f"Value at 10 years: ${gs3.value_at(10):.2f}")
     print()
 
-    # Example 5: Compare APR vs APY
+    # Example 4: Compare APR vs APY
     print("Comparison: apr(0.045) vs apy(0.0459)")
 
     gs_apr = growth_series(
