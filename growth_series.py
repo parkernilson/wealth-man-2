@@ -60,29 +60,16 @@ class Contribution:
 
 
 class Rate:
-    """Represents an interest rate with a specific time period."""
+    """
+    Represents an interest rate with a specific time period.
+
+    - Annual rates are treated as NOMINAL (APR): divided by compounding periods
+    - Monthly/daily rates are EFFECTIVE: the actual rate applied per period
+    """
 
     def __init__(self, value, period):
         self.value = value
         self.period = period
-
-    def to_annual(self):
-        """
-        Convert rate to equivalent annual rate using compound interest.
-
-        For example, a 0.5% monthly rate compounds to:
-        (1.005)^12 - 1 = 6.17% annual (not 6%)
-        """
-        if self.period == 'daily':
-            # Compound daily rate to annual: (1 + r)^365 - 1
-            return (1 + self.value) ** 365 - 1
-        elif self.period == 'monthly':
-            # Compound monthly rate to annual: (1 + r)^12 - 1
-            return (1 + self.value) ** 12 - 1
-        elif self.period == 'annually':
-            return self.value
-        else:
-            raise ValueError(f"Unknown period: {self.period}")
 
 
 # Helper functions for creating Duration objects
@@ -167,6 +154,8 @@ class growth_series:
     -----------
     rate : Rate
         A Rate object created with daily(rate=X), monthly(rate=X), or annual(rate=X) functions
+        - Annual rates are NOMINAL (APR): 5% annual with monthly compounding means 5%/12 per month
+        - Monthly/daily rates are EFFECTIVE: 0.5% monthly means exactly 0.5% applied each month
     compounds : CompoundingInterval
         A CompoundingInterval object created with daily(), monthly(), or annual() functions (no argument)
     contribution : Contribution, optional
@@ -178,24 +167,57 @@ class growth_series:
     """
 
     def __init__(self, rate, compounds, contribution=None, duration=None, initial_principal=0):
-        # Convert rate to annual if it's a Rate object
-        if isinstance(rate, Rate):
-            self.rate = rate.to_annual()
-        else:
+        # Store the original rate object
+        if not isinstance(rate, Rate):
             raise TypeError("rate must be a Rate object. Use daily(rate=X), monthly(rate=X), or annual(rate=X).")
 
+        if not isinstance(compounds, CompoundingInterval):
+            raise TypeError("compounds must be a CompoundingInterval object. Use daily(), monthly(), or annual() without arguments.")
+
+        self.rate_obj = rate
         self.compounds = compounds
         self.contribution = contribution
         self.duration = duration
         self.initial_principal = initial_principal
 
-        # Validate compounds parameter
-        if not isinstance(compounds, CompoundingInterval):
-            raise TypeError("compounds must be a CompoundingInterval object. Use daily(), monthly(), or annual() without arguments.")
-
     def _get_compounding_periods_per_year(self):
         """Get the number of compounding periods per year."""
         return self.compounds.periods_per_year()
+
+    def _get_rate_per_period(self):
+        """
+        Convert the rate to match the compounding period.
+
+        - Annual rates are treated as NOMINAL (APR): divide by periods
+        - Monthly/daily rates are treated as EFFECTIVE: use compound conversion
+        """
+        rate_value = self.rate_obj.value
+        rate_period = self.rate_obj.period
+        compound_interval = self.compounds.interval
+
+        # If they match, use the rate directly
+        if rate_period == compound_interval:
+            return rate_value
+
+        # Annual rate → other period: use nominal rate (divide)
+        if rate_period == 'annually':
+            periods_per_year = self._get_compounding_periods_per_year()
+            return rate_value / periods_per_year
+
+        # Non-annual rate → convert using compound formula
+        # First determine periods per year for source and target
+        source_periods = {
+            'daily': 365,
+            'monthly': 12,
+            'annually': 1
+        }[rate_period]
+
+        target_periods = self._get_compounding_periods_per_year()
+
+        # Convert: (1 + rate)^(source/target) - 1
+        # E.g., monthly (0.5%) to daily: (1.005)^(12/365) - 1 ≈ 0.0001638 per day
+        # Because: (1 + r_daily)^(365/12) = 1 + r_monthly
+        return (1 + rate_value) ** (source_periods / target_periods) - 1
 
     def _get_contribution_per_period(self):
         """Convert contribution to match the compounding period."""
@@ -241,19 +263,18 @@ class growth_series:
 
         # Get compounding parameters
         n = self._get_compounding_periods_per_year()  # compounds per year
-        r = self.rate  # annual rate
+        rate_per_period = self._get_rate_per_period()  # rate per compounding period
         pmt = self._get_contribution_per_period()  # contribution per period
 
         # Calculate number of periods
         num_periods = n * t_years
 
         # If rate is 0, use simple calculation
-        if r == 0:
+        if rate_per_period == 0:
             return self.initial_principal + (pmt * num_periods)
 
         # Compound interest with regular contributions formula:
-        # FV = P(1 + r/n)^(nt) + PMT × [((1 + r/n)^(nt) - 1) / (r/n)]
-        rate_per_period = r / n
+        # FV = P(1 + r_period)^(num_periods) + PMT × [((1 + r_period)^(num_periods) - 1) / r_period]
 
         # Future value of principal
         fv_principal = self.initial_principal * ((1 + rate_per_period) ** num_periods)
@@ -281,45 +302,48 @@ class growth_series:
 
 # Example usage
 if __name__ == "__main__":
-    # Example 1: Monthly compounding, monthly contributions, 5 years with annual rate
+    # Example 1: Annual rate (NOMINAL) with monthly compounding
+    # 5% APR means 5%/12 = 0.4167% applied each month
     gs1 = growth_series(
-        rate=annual(rate=0.05),  # Annual rate of 5%
-        compounds=monthly(),  # No argument = compounding interval
-        contribution=monthly(amount=100),  # With amount = contribution
+        rate=annual(rate=0.05),  # 5% APR (nominal annual rate)
+        compounds=monthly(),  # Compound monthly
+        contribution=monthly(amount=100),
         duration=years(5),
         initial_principal=1000
     )
 
-    print(f"Example 1: 5% annual rate, monthly compounding, $100/month, 5 years")
+    print(f"Example 1: 5% APR with monthly compounding, $100/month, 5 years")
     print(f"Final value: ${gs1.get_final_value():.2f}")
+    print(f"Value at 3 months: ${gs1.value_at(90):.2f}")
     print(f"Value at 1 year: ${gs1.value_at(365):.2f}")
     print()
 
-    # Example 2: Daily compounding, daily contributions, 10 years with monthly rate
-    # Note: 0.5% monthly compounds to 6.17% annual, not 6%
+    # Example 2: Effective monthly rate with monthly compounding
+    # 0.5% effective monthly rate means exactly 0.5% is applied each month
     gs2 = growth_series(
-        rate=monthly(rate=0.005),  # Monthly rate of 0.5% → 6.17% annual (compounded)
-        compounds=daily(),  # No argument = compounding interval
-        contribution=daily(amount=5),  # With amount = contribution
+        rate=monthly(rate=0.005),  # 0.5% effective monthly rate
+        compounds=monthly(),  # Compound monthly
+        contribution=monthly(amount=100),
+        duration=years(5),
+        initial_principal=1000
+    )
+
+    print(f"Example 2: 0.5% effective monthly rate, monthly compounding, $100/month, 5 years")
+    print(f"Final value: ${gs2.get_final_value():.2f}")
+    print(f"Value at 3 months: ${gs2.value_at(90):.2f}")
+    print(f"Value at 1 year: ${gs2.value_at(365):.2f}")
+    print()
+
+    # Example 3: Effective monthly rate with daily compounding
+    # 0.5% monthly converted to daily: (1.005)^(1/30.44) - 1 per day
+    gs3 = growth_series(
+        rate=monthly(rate=0.005),  # 0.5% effective monthly rate
+        compounds=daily(),  # Compound daily (converts rate automatically)
+        contribution=daily(amount=5),
         duration=years(10),
         initial_principal=500
     )
 
-    print(f"Example 2: 0.5% monthly rate (6.17% annual), daily compounding, $5/day, 10 years")
-    print(f"Final value: ${gs2.get_final_value():.2f}")
-    print(f"Value at 5 years: ${gs2.value_at(365*5):.2f}")
-    print()
-
-    # Example 3: Annual compounding, annual contributions, 1000 days with daily rate
-    # To get ~5% annual, use daily rate of: (1.05)^(1/365) - 1 ≈ 0.000133949
-    gs3 = growth_series(
-        rate=daily(rate=0.000133949),  # Daily rate → ~5% annual (compounded)
-        compounds=annual(),  # No argument = compounding interval
-        contribution=annual(amount=500),  # With amount = contribution
-        duration=days(1000),
-        initial_principal=2000
-    )
-
-    print(f"Example 3: Daily rate compounding to ~5% annual, annual compounding, $500/year, 1000 days")
+    print(f"Example 3: 0.5% monthly rate, daily compounding, $5/day, 10 years")
     print(f"Final value: ${gs3.get_final_value():.2f}")
-    print(f"Value at 500 days: ${gs3.value_at(500):.2f}")
+    print(f"Value at 5 years: ${gs3.value_at(365*5):.2f}")
