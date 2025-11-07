@@ -67,11 +67,18 @@ class Rate:
         self.period = period
 
     def to_annual(self):
-        """Convert rate to annual rate."""
+        """
+        Convert rate to equivalent annual rate using compound interest.
+
+        For example, a 0.5% monthly rate compounds to:
+        (1.005)^12 - 1 = 6.17% annual (not 6%)
+        """
         if self.period == 'daily':
-            return self.value * 365
+            # Compound daily rate to annual: (1 + r)^365 - 1
+            return (1 + self.value) ** 365 - 1
         elif self.period == 'monthly':
-            return self.value * 12
+            # Compound monthly rate to annual: (1 + r)^12 - 1
+            return (1 + self.value) ** 12 - 1
         elif self.period == 'annually':
             return self.value
         else:
@@ -289,28 +296,30 @@ if __name__ == "__main__":
     print()
 
     # Example 2: Daily compounding, daily contributions, 10 years with monthly rate
+    # Note: 0.5% monthly compounds to 6.17% annual, not 6%
     gs2 = growth_series(
-        rate=monthly(rate=0.005),  # Monthly rate of 0.5% (6% annual)
+        rate=monthly(rate=0.005),  # Monthly rate of 0.5% → 6.17% annual (compounded)
         compounds=daily(),  # No argument = compounding interval
         contribution=daily(amount=5),  # With amount = contribution
         duration=years(10),
         initial_principal=500
     )
 
-    print(f"Example 2: 0.5% monthly rate, daily compounding, $5/day, 10 years")
+    print(f"Example 2: 0.5% monthly rate (6.17% annual), daily compounding, $5/day, 10 years")
     print(f"Final value: ${gs2.get_final_value():.2f}")
     print(f"Value at 5 years: ${gs2.value_at(365*5):.2f}")
     print()
 
     # Example 3: Annual compounding, annual contributions, 1000 days with daily rate
+    # To get ~5% annual, use daily rate of: (1.05)^(1/365) - 1 ≈ 0.000133949
     gs3 = growth_series(
-        rate=daily(rate=0.0001096),  # Daily rate of ~0.01096% (4% annual)
+        rate=daily(rate=0.000133949),  # Daily rate → ~5% annual (compounded)
         compounds=annual(),  # No argument = compounding interval
         contribution=annual(amount=500),  # With amount = contribution
         duration=days(1000),
         initial_principal=2000
     )
 
-    print(f"Example 3: 0.01096% daily rate, annual compounding, $500/year, 1000 days")
+    print(f"Example 3: Daily rate compounding to ~5% annual, annual compounding, $500/year, 1000 days")
     print(f"Final value: ${gs3.get_final_value():.2f}")
     print(f"Value at 500 days: ${gs3.value_at(500):.2f}")
