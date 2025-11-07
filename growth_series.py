@@ -59,6 +59,25 @@ class Contribution:
             raise ValueError(f"Unknown interval: {self.interval}")
 
 
+class Rate:
+    """Represents an interest rate with a specific time period."""
+
+    def __init__(self, value, period):
+        self.value = value
+        self.period = period
+
+    def to_annual(self):
+        """Convert rate to annual rate."""
+        if self.period == 'daily':
+            return self.value * 365
+        elif self.period == 'monthly':
+            return self.value * 12
+        elif self.period == 'annually':
+            return self.value
+        else:
+            raise ValueError(f"Unknown period: {self.period}")
+
+
 # Helper functions for creating Duration objects
 def days(value):
     """Create a Duration object representing days."""
@@ -75,44 +94,62 @@ def years(value):
     return Duration(value, 'years')
 
 
-# Helper functions that work for both CompoundingInterval and Contribution
-def daily(amount=None):
+# Helper functions that work for CompoundingInterval, Contribution, and Rate
+def daily(amount=None, rate=None):
     """
-    Create either a CompoundingInterval or Contribution object for daily intervals.
+    Create a CompoundingInterval, Contribution, or Rate object for daily intervals.
 
     If called without arguments: returns CompoundingInterval for daily compounding.
     If called with amount: returns Contribution for daily contributions.
+    If called with rate: returns Rate for daily interest rate.
     """
-    if amount is None:
-        return CompoundingInterval('daily')
-    else:
+    if amount is not None and rate is not None:
+        raise ValueError("Cannot specify both amount and rate")
+
+    if rate is not None:
+        return Rate(rate, 'daily')
+    elif amount is not None:
         return Contribution(amount, 'daily')
+    else:
+        return CompoundingInterval('daily')
 
 
-def monthly(amount=None):
+def monthly(amount=None, rate=None):
     """
-    Create either a CompoundingInterval or Contribution object for monthly intervals.
+    Create a CompoundingInterval, Contribution, or Rate object for monthly intervals.
 
     If called without arguments: returns CompoundingInterval for monthly compounding.
     If called with amount: returns Contribution for monthly contributions.
+    If called with rate: returns Rate for monthly interest rate.
     """
-    if amount is None:
-        return CompoundingInterval('monthly')
-    else:
+    if amount is not None and rate is not None:
+        raise ValueError("Cannot specify both amount and rate")
+
+    if rate is not None:
+        return Rate(rate, 'monthly')
+    elif amount is not None:
         return Contribution(amount, 'monthly')
+    else:
+        return CompoundingInterval('monthly')
 
 
-def annual(amount=None):
+def annual(amount=None, rate=None):
     """
-    Create either a CompoundingInterval or Contribution object for annual intervals.
+    Create a CompoundingInterval, Contribution, or Rate object for annual intervals.
 
     If called without arguments: returns CompoundingInterval for annual compounding.
     If called with amount: returns Contribution for annual contributions.
+    If called with rate: returns Rate for annual interest rate.
     """
-    if amount is None:
-        return CompoundingInterval('annually')
-    else:
+    if amount is not None and rate is not None:
+        raise ValueError("Cannot specify both amount and rate")
+
+    if rate is not None:
+        return Rate(rate, 'annually')
+    elif amount is not None:
         return Contribution(amount, 'annually')
+    else:
+        return CompoundingInterval('annually')
 
 
 class growth_series:
@@ -121,12 +158,12 @@ class growth_series:
 
     Parameters:
     -----------
-    rate : float
-        Annual interest rate (e.g., 0.05 for 5%)
+    rate : Rate
+        A Rate object created with daily(rate=X), monthly(rate=X), or annual(rate=X) functions
     compounds : CompoundingInterval
         A CompoundingInterval object created with daily(), monthly(), or annual() functions (no argument)
     contribution : Contribution, optional
-        A Contribution object created with daily(), monthly(), or annual() functions (with amount) (default: None)
+        A Contribution object created with daily(amount=X), monthly(amount=X), or annual(amount=X) (default: None)
     duration : Duration, optional
         A Duration object created with days(), months(), or years() functions (default: None)
     initial_principal : float, optional
@@ -134,7 +171,12 @@ class growth_series:
     """
 
     def __init__(self, rate, compounds, contribution=None, duration=None, initial_principal=0):
-        self.rate = rate
+        # Convert rate to annual if it's a Rate object
+        if isinstance(rate, Rate):
+            self.rate = rate.to_annual()
+        else:
+            raise TypeError("rate must be a Rate object. Use daily(rate=X), monthly(rate=X), or annual(rate=X).")
+
         self.compounds = compounds
         self.contribution = contribution
         self.duration = duration
@@ -232,43 +274,43 @@ class growth_series:
 
 # Example usage
 if __name__ == "__main__":
-    # Example 1: Monthly compounding, monthly contributions, 5 years
+    # Example 1: Monthly compounding, monthly contributions, 5 years with annual rate
     gs1 = growth_series(
-        rate=0.05,
+        rate=annual(rate=0.05),  # Annual rate of 5%
         compounds=monthly(),  # No argument = compounding interval
-        contribution=monthly(100),  # With argument = contribution amount
+        contribution=monthly(amount=100),  # With amount = contribution
         duration=years(5),
         initial_principal=1000
     )
 
-    print(f"Example 1: Monthly compounding, $100/month, 5 years")
+    print(f"Example 1: 5% annual rate, monthly compounding, $100/month, 5 years")
     print(f"Final value: ${gs1.get_final_value():.2f}")
     print(f"Value at 1 year: ${gs1.value_at(365):.2f}")
     print()
 
-    # Example 2: Daily compounding, daily contributions, 10 years
+    # Example 2: Daily compounding, daily contributions, 10 years with monthly rate
     gs2 = growth_series(
-        rate=0.06,
+        rate=monthly(rate=0.005),  # Monthly rate of 0.5% (6% annual)
         compounds=daily(),  # No argument = compounding interval
-        contribution=daily(5),  # With argument = contribution amount
+        contribution=daily(amount=5),  # With amount = contribution
         duration=years(10),
         initial_principal=500
     )
 
-    print(f"Example 2: Daily compounding, $5/day, 10 years")
+    print(f"Example 2: 0.5% monthly rate, daily compounding, $5/day, 10 years")
     print(f"Final value: ${gs2.get_final_value():.2f}")
     print(f"Value at 5 years: ${gs2.value_at(365*5):.2f}")
     print()
 
-    # Example 3: Annual compounding, annual contributions, 1000 days
+    # Example 3: Annual compounding, annual contributions, 1000 days with daily rate
     gs3 = growth_series(
-        rate=0.04,
+        rate=daily(rate=0.0001096),  # Daily rate of ~0.01096% (4% annual)
         compounds=annual(),  # No argument = compounding interval
-        contribution=annual(500),  # With argument = contribution amount
+        contribution=annual(amount=500),  # With amount = contribution
         duration=days(1000),
         initial_principal=2000
     )
 
-    print(f"Example 3: Annual compounding, $500/year, 1000 days")
+    print(f"Example 3: 0.01096% daily rate, annual compounding, $500/year, 1000 days")
     print(f"Final value: ${gs3.get_final_value():.2f}")
     print(f"Value at 500 days: ${gs3.value_at(500):.2f}")
