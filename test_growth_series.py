@@ -24,25 +24,26 @@ class TestGrowthSeries(unittest.TestCase):
             rate=apr(0.07),
             compounds='annually',
             contribution=monthly(300),
-            duration=years(10),
-            initial_principal=10000
+            duration=years(10)
         )
 
+        principal = 10000
+
         # Test at 1 year (tolerance: +/- $10)
-        self.assertAlmostEqual(gs.value_at(1), 14300.00, delta=10.0,
-            msg=f"Expected $14,300.00 at 1 year, got ${gs.value_at(1):.2f}")
+        self.assertAlmostEqual(gs.value_at(1, principal), 14300.00, delta=10.0,
+            msg=f"Expected $14,300.00 at 1 year, got ${gs.value_at(1, principal):.2f}")
 
         # Test at 5 years (tolerance: +/- $10)
-        self.assertAlmostEqual(gs.value_at(5), 34728.18, delta=10.0,
-            msg=f"Expected $34,728.18 at 5 years, got ${gs.value_at(5):.2f}")
+        self.assertAlmostEqual(gs.value_at(5, principal), 34728.18, delta=10.0,
+            msg=f"Expected $34,728.18 at 5 years, got ${gs.value_at(5, principal):.2f}")
 
         # Test at 10 years (tolerance: +/- $10)
-        self.assertAlmostEqual(gs.value_at(10), 69410.73, delta=10.0,
-            msg=f"Expected $69,410.73 at 10 years, got ${gs.value_at(10):.2f}")
+        self.assertAlmostEqual(gs.value_at(10, principal), 69410.73, delta=10.0,
+            msg=f"Expected $69,410.73 at 10 years, got ${gs.value_at(10, principal):.2f}")
 
         # Test get_final_value() matches value_at(10) (tolerance: +/- $10)
-        self.assertAlmostEqual(gs.get_final_value(), 69410.73, delta=10.0,
-            msg=f"Expected final value $69,410.73, got ${gs.get_final_value():.2f}")
+        self.assertAlmostEqual(gs.get_final_value(principal), 69410.73, delta=10.0,
+            msg=f"Expected final value $69,410.73, got ${gs.get_final_value(principal):.2f}")
 
     def test_monthly_compounding_with_apr(self):
         """Test monthly compounding with APR."""
@@ -50,11 +51,11 @@ class TestGrowthSeries(unittest.TestCase):
             rate=apr(0.05),
             compounds='monthly',
             contribution=monthly(100),
-            duration=years(5),
-            initial_principal=1000
+            duration=years(5)
         )
 
-        final_value = gs.get_final_value()
+        principal = 1000
+        final_value = gs.get_final_value(principal)
         # With 5% APR compounded monthly: 1000 * (1 + 0.05/12)^60 + annuity
         expected = 8083.97
         self.assertAlmostEqual(final_value, expected, delta=0.01,
@@ -66,19 +67,18 @@ class TestGrowthSeries(unittest.TestCase):
         gs_apr = growth_series(
             rate=apr(0.045),
             compounds='monthly',
-            duration=years(1),
-            initial_principal=10000
+            duration=years(1)
         )
 
         gs_apy = growth_series(
             rate=apy(0.0459),
             compounds='monthly',
-            duration=years(1),
-            initial_principal=10000
+            duration=years(1)
         )
 
-        apr_result = gs_apr.get_final_value()
-        apy_result = gs_apy.get_final_value()
+        principal = 10000
+        apr_result = gs_apr.get_final_value(principal)
+        apy_result = gs_apy.get_final_value(principal)
 
         # They should be very close (within a few cents due to rounding)
         self.assertAlmostEqual(apr_result, apy_result, delta=1.0,
@@ -89,13 +89,13 @@ class TestGrowthSeries(unittest.TestCase):
         gs = growth_series(
             rate=apr(0.06),
             compounds='annually',
-            duration=years(10),
-            initial_principal=1000
+            duration=years(10)
         )
 
+        principal = 1000
         # Simple compound interest: 1000 * (1.06)^10 = 1790.85
         expected = 1790.85
-        final_value = gs.get_final_value()
+        final_value = gs.get_final_value(principal)
         self.assertAlmostEqual(final_value, expected, delta=0.01,
             msg=f"Expected ${expected:.2f}, got ${final_value:.2f}")
 
@@ -105,11 +105,11 @@ class TestGrowthSeries(unittest.TestCase):
             rate=apr(0.05),
             compounds='monthly',
             contribution=monthly(100),
-            duration=years(5),
-            initial_principal=0
+            duration=years(5)
         )
 
-        final_value = gs.get_final_value()
+        principal = 0
+        final_value = gs.get_final_value(principal)
         # Just the annuity portion
         expected = 6800.61
         self.assertAlmostEqual(final_value, expected, delta=0.01,
@@ -121,11 +121,11 @@ class TestGrowthSeries(unittest.TestCase):
             rate=apr(0.08),
             compounds='annually',
             contribution=annual(6000),
-            duration=years(10),
-            initial_principal=10000
+            duration=years(10)
         )
 
-        final_value = gs.get_final_value()
+        principal = 10000
+        final_value = gs.get_final_value(principal)
         # 10000 * (1.08)^10 + 6000 * [((1.08)^10 - 1) / 0.08]
         expected = 108508.62
         self.assertAlmostEqual(final_value, expected, delta=0.01,
@@ -137,13 +137,13 @@ class TestGrowthSeries(unittest.TestCase):
             rate=apr(0.0),
             compounds='monthly',
             contribution=monthly(100),
-            duration=years(5),
-            initial_principal=1000
+            duration=years(5)
         )
 
+        principal = 1000
         # Should just be principal + contributions
         expected = 1000 + (100 * 12 * 5)
-        final_value = gs.get_final_value()
+        final_value = gs.get_final_value(principal)
         self.assertAlmostEqual(final_value, expected, delta=0.01,
             msg=f"Expected ${expected:.2f}, got ${final_value:.2f}")
 
@@ -153,19 +153,19 @@ class TestGrowthSeries(unittest.TestCase):
             rate=apr(0.06),
             compounds='monthly',
             contribution=monthly(50),
-            duration=years(3),
-            initial_principal=1000
+            duration=years(3)
         )
 
+        principal = 1000
         # Test at 6 months
-        value_6m = gs.value_at(0.5)
+        value_6m = gs.value_at(0.5, principal)
         self.assertGreater(value_6m, 1000, "Value should increase after 6 months")
-        self.assertLess(value_6m, gs.get_final_value(), "6 month value should be less than final")
+        self.assertLess(value_6m, gs.get_final_value(principal), "6 month value should be less than final")
 
         # Test at 1.5 years
-        value_1_5y = gs.value_at(1.5)
+        value_1_5y = gs.value_at(1.5, principal)
         self.assertGreater(value_1_5y, value_6m, "Value should increase over time")
-        self.assertLess(value_1_5y, gs.get_final_value(), "1.5 year value should be less than final")
+        self.assertLess(value_1_5y, gs.get_final_value(principal), "1.5 year value should be less than final")
 
     def test_requires_apr_or_apy_helper(self):
         """Test that plain floats are rejected for rate parameter."""
@@ -192,25 +192,23 @@ class TestGrowthSeries(unittest.TestCase):
         gs = growth_series(
             rate=apr(0.05),
             compounds='monthly',
-            duration=years(5),
-            initial_principal=1000
+            duration=years(5)
         )
 
         with self.assertRaises(ValueError) as cm:
-            gs.value_at(-1)
+            gs.value_at(-1, 1000)
         self.assertIn("t_years must be non-negative", str(cm.exception))
 
     def test_missing_duration_raises_error(self):
         """Test that calling get_final_value() without duration raises error."""
         gs = growth_series(
             rate=apr(0.05),
-            compounds='monthly',
-            initial_principal=1000
+            compounds='monthly'
             # No duration specified
         )
 
         with self.assertRaises(ValueError) as cm:
-            gs.get_final_value()
+            gs.get_final_value(1000)
         self.assertIn("Duration not set", str(cm.exception))
 
 
