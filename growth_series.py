@@ -2,6 +2,9 @@
 growth_series: A class for modeling financial growth with compound interest and regular contributions.
 """
 
+import matplotlib.pyplot as plt
+import numpy as np
+
 
 class Duration:
     """Represents a duration of time."""
@@ -307,6 +310,99 @@ class growth_scenario:
 
         # Calculate value at time t within the target series
         return self.series_list[series_index].value_at(t_years, principal)
+
+    def plot(self, num_points=500, show_series_transitions=True, title=None, figsize=(10, 6)):
+        """
+        Plot the growth scenario over time using matplotlib.
+
+        Parameters:
+        -----------
+        num_points : int, optional
+            Number of points to plot (default: 500)
+        show_series_transitions : bool, optional
+            Whether to show vertical lines at series transitions (default: True)
+        title : str, optional
+            Custom title for the plot (default: auto-generated)
+        figsize : tuple, optional
+            Figure size (width, height) in inches (default: (10, 6))
+
+        Returns:
+        --------
+        tuple
+            (fig, ax) - matplotlib figure and axes objects
+        """
+        # Calculate total duration and series boundaries
+        cumulative_years = []
+        current_time = 0
+
+        for series in self.series_list:
+            if series.duration is None:
+                raise ValueError("All series must have a duration set to plot")
+            current_time += series.duration.to_years()
+            cumulative_years.append(current_time)
+
+        total_years = cumulative_years[-1]
+
+        # Generate time points
+        time_points = np.linspace(0, total_years, num_points)
+        values = []
+
+        # Calculate value at each time point
+        for t in time_points:
+            # Find which series this time point belongs to
+            cumulative = 0
+            for i, series in enumerate(self.series_list):
+                series_duration = series.duration.to_years()
+                if t <= cumulative + series_duration:
+                    # Time t is within this series
+                    t_within_series = t - cumulative
+                    value = self.value_at_series(i, t_within_series)
+                    values.append(value)
+                    break
+                cumulative += series_duration
+
+        # Create the plot
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.plot(time_points, values, linewidth=2, label='Portfolio Value')
+
+        # Add series transition markers
+        if show_series_transitions and len(self.series_list) > 1:
+            series_values = self.get_series_values()
+            for i, (year, value) in enumerate(zip(cumulative_years[:-1], series_values[:-1])):
+                ax.axvline(x=year, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+                ax.plot(year, value, 'ro', markersize=6, label=f'End of Series {i+1}' if i == 0 else None)
+
+        # Format the plot
+        ax.set_xlabel('Time (years)', fontsize=12)
+        ax.set_ylabel('Portfolio Value ($)', fontsize=12)
+
+        # Auto-generate title if not provided
+        if title is None:
+            title = f'Growth Scenario: ${self.initial_principal:,.0f} over {total_years:.1f} years'
+        ax.set_title(title, fontsize=14, fontweight='bold')
+
+        # Format y-axis as currency
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x:,.0f}'))
+
+        # Add grid
+        ax.grid(True, alpha=0.3)
+
+        # Add legend
+        if show_series_transitions and len(self.series_list) > 1:
+            ax.legend(loc='upper left')
+
+        # Add final value annotation
+        final_value = self.get_final_value()
+        ax.annotate(f'Final: ${final_value:,.2f}',
+                   xy=(total_years, final_value),
+                   xytext=(-60, -20),
+                   textcoords='offset points',
+                   bbox=dict(boxstyle='round,pad=0.5', facecolor='yellow', alpha=0.7),
+                   arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+
+        plt.tight_layout()
+
+        return fig, ax
 
 
 # Example usage
